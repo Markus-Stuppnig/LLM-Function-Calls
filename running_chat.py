@@ -5,17 +5,40 @@ import json
 
 client = OpenAI(api_key=token)
 
+maximilian_termin_belegt = False
+moritz_termin_belegt = False
+
 # Example dummy function hard coded to return the same weather
 # In production, this could be your backend API or an external API
 def mache_termin_aus(arzt: str):
     # print("debug: Arzt - '" + arzt + "'")
     """Returned einen Termin, an dem der angegebene Arzt noch Platz hat"""
+    global maximilian_termin_belegt
+    global moritz_termin_belegt
+    if "maximilian" in arzt.lower():
+        if(maximilian_termin_belegt):
+            return json.dumps({"error": "Kein freier Termin."})
+        maximilian_termin_belegt = True
+        return json.dumps({"termin": "5. Februar 2024"})
+    elif "moritz" in arzt.lower():
+        if(moritz_termin_belegt):
+            return json.dumps({"error": "Kein freier Termin."})
+        moritz_termin_belegt = True
+        return json.dumps({"termin": "7. Februar 2024"})
+    else:
+        return json.dumps({"error": "Dieser Arzt existiert nicht."})
+
+
+def get_aerzte():
+    return json.dumps({"aerzte": "Maximilian, Moritz"})
+
+
+def get_termine_von_arzt(arzt: str):
     if "maximilian" in arzt.lower():
         return json.dumps({"termin": "5. Februar 2024"})
     elif "moritz" in arzt.lower():
         return json.dumps({"termin": "7. Februar 2024"})
     else:
-        print('didn\'t find')
         return json.dumps({"error": "Dieser Arzt existiert nicht."})
 		
     
@@ -44,15 +67,19 @@ def run_dialogue(tools: list, available_functions: dict):
         messages.append(response_message) #error if this line ain't here and tool_calls - Markus
 
         if tool_calls:
-
             # Step 4: send the info for each function call and function response to the model
             for tool_call in tool_calls:
                 function_name = tool_call.function.name
                 function_to_call = available_functions[function_name]
                 function_args = json.loads(tool_call.function.arguments)
-                function_response = function_to_call(
-                    arzt=function_args.get("arzt"),
-                )
+
+                if function_to_call == mache_termin_aus or function_to_call == get_termine_von_arzt:
+                    function_response = function_to_call(
+                        arzt=function_args.get("arzt"),
+                    )
+                else:
+                    function_response = function_to_call()
+
                 messages.append(
                     {
                         "tool_call_id": tool_call.id,
@@ -88,11 +115,37 @@ tools = [
                 "required": ["arzt"],
             },
         },
-    }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_aerzte",
+            "description": "Returned die Namen der Aerzte, die es gibt, nur die Namen, keine termine",
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_termine_von_arzt",
+            "description": "Returned die freien Termine von dem angegebenen Arzt",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "arzt": {
+                        "type": "string",
+                        "description": "Der Name des Arztes",
+                    },
+                },
+                "required": ["arzt"],
+            },
+        },
+    },
 ]
 
 available_functions = {
     "mache_termin_aus": mache_termin_aus,
+    "get_aerzte": get_aerzte,
+    "get_termine_von_arzt": get_termine_von_arzt,
 }
 
-print(run_dialogue(tools, available_functions))
+run_dialogue(tools, available_functions)
